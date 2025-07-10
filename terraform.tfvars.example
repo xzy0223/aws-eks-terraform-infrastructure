@@ -1,0 +1,65 @@
+# Copy this file to terraform.tfvars and modify as needed
+
+aws_region               = "us-west-2"
+project_name            = "my-project"
+vpc_cidr                = "10.0.0.0/16"
+availability_zone_count = 3
+
+# 子网掩码配置 (可选)
+# 默认值 8 表示从 /16 VPC 创建 /24 子网
+public_subnet_newbits   = 8   # /24 子网 (256 个 IP)
+private_subnet_newbits  = 8   # /24 子网 (256 个 IP)
+
+# 如果需要更大的子网，可以使用更小的值:
+# public_subnet_newbits   = 6   # /22 子网 (1024 个 IP)
+# private_subnet_newbits  = 6   # /22 子网 (1024 个 IP)
+
+# 如果需要更小的子网，可以使用更大的值:
+# public_subnet_newbits   = 10  # /26 子网 (64 个 IP)
+# private_subnet_newbits  = 10  # /26 子网 (64 个 IP)
+
+# 自定义子网 CIDR (可选，会覆盖自动计算)
+# custom_public_subnet_cidrs  = ["10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24"]
+# custom_private_subnet_cidrs = ["10.0.10.0/24", "10.0.11.0/24", "10.0.12.0/24"]
+
+# Bastion Host Configuration
+enable_bastion              = false
+bastion_key_name           = ""  # 必须指定已存在的 EC2 Key Pair 名称
+bastion_instance_type      = "t2.micro"
+bastion_subnet_cidr        = "10.0.100.0/24"
+bastion_allowed_ssh_cidrs  = ["0.0.0.0/0"]  # 建议限制为您的 IP 地址
+bastion_root_volume_size   = 100
+
+# EKS Cluster Configuration
+enable_eks                = true
+kubernetes_version        = "1.33"
+eks_node_instance_type    = "c7a.xlarge"
+eks_node_desired_size     = 2
+eks_node_max_size         = 4
+eks_node_min_size         = 1
+
+# EKS Add-ons Configuration
+enable_pod_identity                  = true
+enable_ebs_csi_driver               = true
+enable_coredns                      = true
+enable_kube_proxy                   = true
+enable_vpc_cni                      = true
+enable_vpc_cni_prefix_delegation    = true  # 启用前缀委派以提高 Pod 密度
+enable_aws_load_balancer_controller = true
+
+# EC2 Instance Naming (optional)
+# node_instance_name_prefix = "my-app"  # 如果设置，实例名称将是 "my-app-eks-node"，否则使用 "my-project-eks-node"
+
+# EKS Access Configuration
+enable_cluster_creator_admin_permissions = true  # 自动为创建集群的身份添加管理员权限
+
+# 额外的管理员用户 (可选)
+# additional_admin_users = [
+#   "arn:aws:iam::123456789012:user/admin-user1",
+#   "arn:aws:iam::123456789012:user/admin-user2"
+# ]
+
+# 额外的管理员角色 (可选)
+# additional_admin_roles = [
+#   "arn:aws:iam::123456789012:role/EKSAdminRole"
+# ]

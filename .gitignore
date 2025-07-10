@@ -1,0 +1,67 @@
+# Terraform files
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+*.tfplan
+*.tfplan.*
+
+# Terraform variable files
+terraform.tfvars
+*.auto.tfvars
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Backup files
+*.bak
+*.backup
+
+# Local environment files
+.env
+.env.local
+.env.*.local
+
+# Node modules (if using any JS tools)
+node_modules/
+
+# Python files (if using any Python tools)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Helm charts dependencies
+charts/*/charts/
+charts/*/requirements.lock
+
+# Kubernetes secrets
+*secret*.yaml
+*secret*.yml
