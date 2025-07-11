@@ -110,4 +110,8 @@ module "eks" {
   enable_cluster_creator_admin_permissions = var.enable_cluster_creator_admin_permissions
   additional_admin_users                   = var.additional_admin_users
   additional_admin_roles                   = var.additional_admin_roles
+  
+  # Additional configuration for Launch Template
+  additional_tags      = var.additional_tags
+  bootstrap_arguments  = var.bootstrap_arguments
 }

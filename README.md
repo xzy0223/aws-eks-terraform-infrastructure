@@ -473,6 +473,242 @@ terraform output -json vpc_id
 
 这些输出为后续的基础设施管理、应用部署和运维操作提供了必要的信息。
 
+## 🏷️ EKS 工作节点 Launch Template 配置
+
+### Launch Template 实现
+
+本项目使用 **Launch Template** 来实现 EKS 工作节点的高级配置，这提供了比基本 `aws_eks_node_group` 更强大的配置能力和更好的控制。
+
+#### 主要特性
+
+1. **自定义实例名称**: 通过 `node_instance_name_prefix` 变量设置自定义前缀
+2. **灵活的标签管理**: 支持实例和 EBS 卷的独立标签配置
+3. **nodeadm 配置**: 支持自定义 EKS 节点初始化参数和标签
+4. **版本管理**: Launch Template 支持版本控制和滚动更新
+5. **MIME 多部分格式**: 使用标准的 MIME 格式进行节点配置
+
+#### 核心配置组件
+
+##### 1. Launch Template 资源
+```hcl
+resource "aws_launch_template" "eks_node_template" {
+  name_prefix   = "${var.project_name}-eks-node-template-"
+  image_id      = data.aws_ssm_parameter.eks_ami_release_version.value
+  instance_type = var.node_instance_type
+  
+  vpc_security_group_ids = [aws_security_group.eks_nodes.id]
+  
+  user_data = base64encode(local.user_data)
+  
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size = var.node_disk_size
+      volume_type = "gp3"
+      encrypted   = true
+      delete_on_termination = true
+    }
+  }
+  
+  tag_specifications {
+    resource_type = "instance"
+    tags = merge(var.additional_tags, {
+      Name = "${var.node_instance_name_prefix}-eks-worker"
+    })
+  }
+  
+  tag_specifications {
+    resource_type = "volume"
+    tags = merge(var.additional_tags, {
+      Name = "${var.node_instance_name_prefix}-eks-worker-volume"
+    })
+  }
+}
+```
+
+##### 2. nodeadm 配置 (MIME 格式)
+```hcl
+locals {
+  user_data = <<-EOF
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUNDARY"
+
+--BOUNDARY
+Content-Type: application/node.eks.aws
+
+apiVersion: node.eks.aws/v1alpha1
+kind: NodeConfig
+spec:
+  cluster:
+    name: ${aws_eks_cluster.main.name}
+    apiServerEndpoint: ${aws_eks_cluster.main.endpoint}
+    certificateAuthority: ${aws_eks_cluster.main.certificate_authority[0].data}
+    cidr: ${var.cluster_service_cidr}
+  kubelet:
+    flags:
+      - --node-labels=role=worker
+
+--BOUNDARY--
+EOF
+}
+```
+
+#### 配置参数
+
+##### 基础配置参数
+```hcl
+# terraform.tfvars
+node_instance_name_prefix = "my-app"      # 实例命名前缀
+node_instance_type       = "t3.medium"   # 实例类型
+node_disk_size          = 50             # 磁盘大小 (GB)
+cluster_service_cidr    = "172.20.0.0/16" # 集群服务 CIDR
+
+# 自定义标签
+additional_tags = {
+  Environment = "production"
+  Team        = "platform"
+  CostCenter  = "engineering"
+  Project     = "eks-infrastructure"
+}
+```
+
+##### 高级配置选项
+```hcl
+# 节点组配置
+desired_capacity = 2
+max_capacity     = 10
+min_capacity     = 1
+
+# 实例类型配置
+node_instance_types = ["t3.medium", "t3.large"]  # 支持多实例类型
+
+# 容量类型配置
+capacity_type = "ON_DEMAND"  # 或 "SPOT"
+```
+
+#### 生成的资源命名模式
+
+使用 Launch Template 后，资源将按以下模式命名：
+
+| 资源类型 | 命名模式 | 示例 |
+|----------|----------|------|
+| **EC2 实例** | `{node_instance_name_prefix}-eks-worker` | `my-app-eks-worker` |
+| **EBS 卷** | `{node_instance_name_prefix}-eks-worker-volume` | `my-app-eks-worker-volume` |
+| **Launch Template** | `{project_name}-eks-node-template-{random_suffix}` | `my-project-eks-node-template-abc123` |
+| **Node Group** | `{project_name}-eks-node-group` | `my-project-eks-node-group` |
+
+#### 与基本配置的对比
+
+| 特性 | 基本 Node Group | Launch Template |
+|------|----------------|-----------------|
+| **自定义实例名称** | ❌ 有限支持 | ✅ 完全支持 |
+| **EBS 卷标签** | ❌ 不支持 | ✅ 完全支持 |
+| **nodeadm 配置** | ❌ 不支持 | ✅ 完全支持 |
+| **节点标签配置** | ❌ 有限支持 | ✅ 灵活配置 |
+| **节点污点配置** | ❌ 不支持 | ✅ 支持 (可选) |
+| **AMI 自动更新** | ✅ 自动 | ✅ 自动 |
+| **版本控制** | ❌ 不支持 | ✅ 支持 |
+| **滚动更新** | ✅ 支持 | ✅ 更好支持 |
+| **多实例类型** | ❌ 不支持 | ✅ 支持 |
+| **Spot 实例** | ❌ 有限支持 | ✅ 完全支持 |
+
+#### 重要技术细节
+
+##### 1. MIME 多部分格式要求
+- Amazon Linux 2023 要求使用 MIME 多部分格式
+- 不能使用传统的 shell 脚本格式
+- 必须包含正确的 Content-Type 头
+
+##### 2. nodeadm 配置结构
+```yaml
+apiVersion: node.eks.aws/v1alpha1
+kind: NodeConfig
+spec:
+  cluster:
+    name: ${cluster_name}
+    apiServerEndpoint: ${endpoint}
+    certificateAuthority: ${ca_data}
+    cidr: ${service_cidr}
+  kubelet:
+    flags:
+      - --node-labels=role=worker
+      # 可以添加更多 kubelet 参数
+      # - --max-pods=110
+      # - --container-runtime=containerd
+```
+
+##### 3. 版本管理和更新
+- Launch Template 支持版本控制
+- 更新配置时会创建新版本
+- Node Group 会自动使用最新版本
+- 支持滚动更新策略
+
+#### 部署后验证
+
+部署完成后，您可以验证配置是否生效：
+
+```bash
+# 1. 查看 EC2 实例和命名
+aws ec2 describe-instances \
+  --filters "Name=tag:kubernetes.io/cluster/my-project-eks-cluster,Values=owned" \
+  --query 'Reservations[].Instances[].{Name:Tags[?Key==`Name`].Value|[0],InstanceId:InstanceId,State:State.Name,InstanceType:InstanceType}'
+
+# 2. 查看 Launch Template 版本
+aws ec2 describe-launch-templates \
+  --filters "Name=tag:Name,Values=my-project-eks-node-launch-template*" \
+  --query 'LaunchTemplates[].{Name:LaunchTemplateName,LatestVersion:LatestVersionNumber,DefaultVersion:DefaultVersionNumber}'
+
+# 3. 验证节点标签
+kubectl get nodes --show-labels | grep role=worker
+
+# 4. 检查节点详细信息
+kubectl describe nodes
+
+# 5. 验证 EBS 卷标签
+aws ec2 describe-volumes \
+  --filters "Name=tag:Name,Values=*eks-worker-volume*" \
+  --query 'Volumes[].{VolumeId:VolumeId,Size:Size,State:State,Tags:Tags}'
+```
+
+#### 故障排除
+
+##### 常见问题和解决方案
+
+1. **节点无法加入集群**
+   ```bash
+   # 检查 Launch Template UserData
+   aws ec2 describe-launch-template-versions \
+     --launch-template-name your-template-name \
+     --query 'LaunchTemplateVersions[0].LaunchTemplateData.UserData' \
+     --output text | base64 -d
+   ```
+
+2. **MIME 格式错误**
+   - 确保使用正确的 MIME 边界标记
+   - 验证 Content-Type 头部正确
+   - 检查 YAML 格式是否正确
+
+3. **节点标签未生效**
+   ```bash
+   # 检查 kubelet 配置
+   kubectl describe node <node-name> | grep Labels -A 10
+   ```
+
+4. **Launch Template 版本问题**
+   ```bash
+   # 查看所有版本
+   aws ec2 describe-launch-template-versions \
+     --launch-template-name your-template-name
+   ```
+
+#### 最佳实践
+
+1. **标签策略**: 使用一致的标签策略便于资源管理
+2. **版本控制**: 保留 Launch Template 历史版本以便回滚
+3. **测试验证**: 部署后验证所有配置是否按预期工作
+4. **监控**: 监控节点健康状态和资源使用情况
+5. **安全**: 确保 EBS 卷加密和适当的安全组配置
+
 ## 文件结构
 
 ```

@@ -48,6 +48,21 @@ output "node_security_group_id" {
   value       = aws_security_group.eks_nodes_sg.id
 }
 
+output "launch_template_id" {
+  description = "ID of the Launch Template used by EKS node group"
+  value       = aws_launch_template.eks_nodes.id
+}
+
+output "launch_template_name" {
+  description = "Name of the Launch Template used by EKS node group"
+  value       = aws_launch_template.eks_nodes.name
+}
+
+output "launch_template_latest_version" {
+  description = "Latest version of the Launch Template"
+  value       = aws_launch_template.eks_nodes.latest_version
+}
+
 output "oidc_issuer_url" {
   description = "The URL on the EKS cluster OIDC Issuer"
   value       = aws_eks_cluster.main.identity[0].oidc[0].issuer

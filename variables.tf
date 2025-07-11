@@ -188,3 +188,17 @@ variable "additional_admin_roles" {
   type        = list(string)
   default     = []
 }
+
+# Additional tags for resources
+variable "additional_tags" {
+  description = "Additional tags to apply to all resources"
+  type        = map(string)
+  default     = {}
+}
+
+# Bootstrap arguments for EKS nodes
+variable "bootstrap_arguments" {
+  description = "Additional arguments to pass to the EKS bootstrap script"
+  type        = string
+  default     = ""
+}

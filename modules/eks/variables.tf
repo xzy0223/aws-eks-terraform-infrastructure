@@ -116,6 +116,20 @@ variable "enable_cluster_creator_admin_permissions" {
   default     = true
 }
 
+# Additional tags for resources
+variable "additional_tags" {
+  description = "Additional tags to apply to all resources"
+  type        = map(string)
+  default     = {}
+}
+
+# Bootstrap arguments for EKS nodes
+variable "bootstrap_arguments" {
+  description = "Additional arguments to pass to the EKS bootstrap script"
+  type        = string
+  default     = ""
+}
+
 variable "additional_admin_users" {
   description = "List of additional IAM user ARNs to grant cluster admin permissions"
   type        = list(string)

@@ -23,7 +23,7 @@ private_subnet_newbits  = 8   # /24 子网 (256 个 IP)
 # custom_private_subnet_cidrs = ["10.0.10.0/24", "10.0.11.0/24", "10.0.12.0/24"]
 
 # Bastion Host Configuration
-enable_bastion              = false
+enable_bastion              = true
 bastion_key_name           = ""  # 必须指定已存在的 EC2 Key Pair 名称
 bastion_instance_type      = "t2.micro"
 bastion_subnet_cidr        = "10.0.100.0/24"
@@ -48,6 +48,22 @@ enable_vpc_cni_prefix_delegation    = true  # 启用前缀委派以提高 Pod �
 enable_aws_load_balancer_controller = true
 
 # EC2 Instance Naming (optional)
+node_instance_name_prefix = "my-app"  # 自定义 EC2 实例名称前缀
+
+# EKS Access Configuration
+enable_cluster_creator_admin_permissions = true
+# additional_admin_users = ["arn:aws:iam::123456789012:user/username"]
+# additional_admin_roles = ["arn:aws:iam::123456789012:role/rolename"]
+
+# Additional Tags (optional)
+additional_tags = {
+  Environment = "development"
+  Team        = "platform"
+  Project     = "eks-infrastructure"
+}
+
+# Bootstrap Arguments (optional)
+# bootstrap_arguments = "--container-runtime containerd --kubelet-extra-args '--max-pods=110'"
 # node_instance_name_prefix = "my-app"  # 如果设置，实例名称将是 "my-app-eks-node"，否则使用 "my-project-eks-node"
 
 # EKS Access Configuration

@@ -204,15 +204,95 @@ resource "aws_eks_cluster" "main" {
   }
 }
 
-# EKS Node Group
+# Data source to get the latest EKS optimized AMI (Amazon Linux 2023)
+data "aws_ssm_parameter" "eks_ami_release_version" {
+  name = "/aws/service/eks/optimized-ami/${aws_eks_cluster.main.version}/amazon-linux-2023/x86_64/standard/recommended/image_id"
+}
+
+# Launch Template for EKS Node Group with custom instance naming
+resource "aws_launch_template" "eks_nodes" {
+  name_prefix   = "${var.name_prefix}-eks-node-template-"
+  description   = "Launch template for EKS worker nodes with custom naming"
+  image_id      = data.aws_ssm_parameter.eks_ami_release_version.value
+  instance_type = var.node_instance_type
+
+  # Security groups - use EKS cluster security group for proper communication
+  vpc_security_group_ids = [aws_eks_cluster.main.vpc_config[0].cluster_security_group_id]
+
+  # Custom tags for EC2 instances
+  tag_specifications {
+    resource_type = "instance"
+    tags = merge(
+      {
+        Name = var.node_instance_name_prefix != "" ? "${var.node_instance_name_prefix}-eks-worker" : "${var.name_prefix}-eks-worker"
+        "kubernetes.io/cluster/${aws_eks_cluster.main.name}" = "owned"
+      },
+      var.additional_tags
+    )
+  }
+
+  # Custom tags for EBS volumes
+  tag_specifications {
+    resource_type = "volume"
+    tags = merge(
+      {
+        Name = var.node_instance_name_prefix != "" ? "${var.node_instance_name_prefix}-eks-worker-volume" : "${var.name_prefix}-eks-worker-volume"
+        "kubernetes.io/cluster/${aws_eks_cluster.main.name}" = "owned"
+      },
+      var.additional_tags
+    )
+  }
+
+  # User data for AL2023 EKS nodes using nodeadm with proper MIME format
+  user_data = base64encode(<<-EOF
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUNDARY"
+
+--BOUNDARY
+Content-Type: application/node.eks.aws
+
+apiVersion: node.eks.aws/v1alpha1
+kind: NodeConfig
+spec:
+  cluster:
+    name: ${aws_eks_cluster.main.name}
+    apiServerEndpoint: ${aws_eks_cluster.main.endpoint}
+    certificateAuthority: ${aws_eks_cluster.main.certificate_authority[0].data}
+    cidr: ${aws_eks_cluster.main.kubernetes_network_config[0].service_ipv4_cidr}
+  kubelet:
+    flags:
+      - --node-labels=role=worker
+
+--BOUNDARY--
+EOF
+  )
+
+  # Ensure instances are terminated when the launch template is updated
+  update_default_version = true
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name = "${var.name_prefix}-eks-node-launch-template"
+  }
+}
+
+# EKS Node Group using Launch Template
 resource "aws_eks_node_group" "main" {
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = "${var.name_prefix}-eks-nodes"
   node_role_arn   = aws_iam_role.eks_node_group_role.arn
   subnet_ids      = var.private_subnet_ids
 
-  capacity_type  = "ON_DEMAND"
-  instance_types = [var.node_instance_type]
+  capacity_type = "ON_DEMAND"
+
+  # Use Launch Template instead of instance_types
+  launch_template {
+    id      = aws_launch_template.eks_nodes.id
+    version = aws_launch_template.eks_nodes.latest_version
+  }
 
   scaling_config {
     desired_size = var.node_desired_size
@@ -229,12 +309,12 @@ resource "aws_eks_node_group" "main" {
     aws_iam_role_policy_attachment.eks_worker_node_policy,
     aws_iam_role_policy_attachment.eks_cni_policy,
     aws_iam_role_policy_attachment.eks_container_registry_policy,
+    aws_launch_template.eks_nodes,
   ]
 
-  # Tags that will be applied to EC2 instances
+  # Node group level tags
   tags = {
-    Name = var.node_instance_name_prefix != "" ? "${var.node_instance_name_prefix}-eks-node" : "${var.name_prefix}-eks-node"
-    "kubernetes.io/cluster/${aws_eks_cluster.main.name}" = "owned"
+    Name = "${var.name_prefix}-eks-node-group"
   }
 }
 
